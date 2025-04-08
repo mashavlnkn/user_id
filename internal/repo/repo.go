@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
 
@@ -16,6 +15,10 @@ import (
 // SQL-запрос на вставку задачи
 const (
 	insertTaskQuery = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
+	selectTaskByID  = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
+	selectAllTasks  = `SELECT id, user_id, title, description, status, created_at FROM tasks`
+	updateTaskQuery = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
+	deleteTaskQuery = `DELETE FROM tasks WHERE id = $1`
 )
 
 type repository struct {
@@ -24,7 +27,12 @@ type repository struct {
 
 // Repository - интерфейс с методом создания задачи
 type Repository interface {
-	CreateTask(ctx context.Context, task Task) (int, error) // Создание задачи
+	CreateTask(ctx context.Context, task Task) (int, error)
+	GetTaskByID(ctx context.Context, id int) (*Task, error)
+	DeleteTask(ctx context.Context, id int) error
+	UpdateTask(ctx context.Context, id int, task Task) error
+	GetAllTasks(ctx context.Context) ([]Task, error)
+	GetTaskByUserID(ctx context.Context, userID int) (*Task, error)
 }
 
 // NewRepository - создание нового экземпляра репозитория с подключением к PostgreSQL
@@ -67,7 +75,67 @@ func (r *repository) CreateTask(ctx context.Context, task Task) (int, error) {
 	var id int
 	err := r.pool.QueryRow(ctx, insertTaskQuery, task.Title, task.Description).Scan(&id)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to insert task")
+		return 0, errors.Wrap(err, "failed to insert task 1")
 	}
 	return id, nil
+}
+func (r *repository) GetTaskByID(ctx context.Context, id int) (*Task, error) {
+	var task Task
+	err := r.pool.QueryRow(ctx, selectTaskByID, id).Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // Возвращаем nil, если задача не найдена
+		}
+		return nil, errors.Wrap(err, "failed to retrieve task")
+	}
+	return &task, nil
+}
+
+// GetAllTasks - получение списка всех задач
+func (r *repository) GetAllTasks(ctx context.Context) ([]Task, error) {
+	rows, err := r.pool.Query(ctx, selectAllTasks)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query tasks")
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var task Task
+		if err := rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.CreatedAt); err != nil {
+			return nil, errors.Wrap(err, "failed to scan task")
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error while iterating over tasks")
+	}
+
+	return tasks, nil
+}
+
+// UpdateTask - обновление задачи
+func (r *repository) UpdateTask(ctx context.Context, id int, task Task) error {
+	result, err := r.pool.Exec(ctx, updateTaskQuery, task.Title, task.Description, id)
+	if err != nil {
+		return errors.Wrap(err, "failed to update task")
+	}
+	if result.RowsAffected() == 0 {
+		return pgx.ErrNoRows // Если строк не изменилось, возвращаем ошибку "нет данных"
+	}
+	return nil
+}
+
+// DeleteTask - удаление задачи
+func (r *repository) DeleteTask(ctx context.Context, id int) error {
+	result, err := r.pool.Exec(ctx, deleteTaskQuery, id)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete task")
+	}
+	if result.RowsAffected() == 0 {
+		return pgx.ErrNoRows // Если строк не удалено, значит задачи не было
+	}
+	return nil
+
 }

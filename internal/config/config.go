@@ -12,6 +12,7 @@ type AppConfig struct {
 	LogLevel   string
 	Rest       Rest
 	PostgreSQL PostgreSQL
+	AuthToken  string `envconfig:"AUTH_TOKEN"`
 }
 
 type Rest struct {

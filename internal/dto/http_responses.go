@@ -43,3 +43,18 @@ func InternalServerError(ctx *fiber.Ctx) error {
 		},
 	})
 }
+func NotFoundError(ctx *fiber.Ctx, message string) error {
+	return ctx.Status(fiber.StatusNotFound).JSON(Response{
+		Status: "error",
+		Error: &Error{
+			Code: "NOT_FOUND",
+			Desc: message,
+		},
+	})
+}
+func SuccessResponse(ctx *fiber.Ctx, data any) error {
+	return ctx.Status(fiber.StatusOK).JSON(Response{
+		Status: "success",
+		Data:   data,
+	})
+}

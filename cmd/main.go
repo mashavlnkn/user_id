@@ -2,16 +2,18 @@ package main
 
 import (
 	"context"
+	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
+	"simple-service/internal/api"
 	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/pkg/errors"
 
-	"simple-service/internal/api"
 	"simple-service/internal/config"
 	customLogger "simple-service/internal/logger"
 	"simple-service/internal/repo"
@@ -32,20 +34,30 @@ func main() {
 	// Инициализация логгера
 	logger, err := customLogger.NewLogger(cfg.LogLevel)
 	if err != nil {
+
 		log.Fatal(errors.Wrap(err, "error initializing logger"))
 	}
 
 	// Подключение к PostgreSQL
 	repository, err := repo.NewRepository(context.Background(), cfg.PostgreSQL)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "failed to initialize repository"))
+		logger.Fatal(errors.Wrap(err, "failed to initialize repository"))
 	}
 
 	// Создание сервиса с бизнес-логикой
 	serviceInstance := service.NewService(repository, logger)
 
 	// Инициализация API
-	app := api.NewRouters(&api.Routers{Service: serviceInstance}, cfg.Rest.Token)
+	app := api.NewRouters(serviceInstance, cfg.AuthToken)
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Сервер работает!")
+	})
+
+	app.Get("/tasks/:id", serviceInstance.GetTaskByID)
+	app.Post("/create_task", serviceInstance.CreateTask)
+	app.Get("/tasks", serviceInstance.GetAllTasks)    // Получить список всех задач
+	app.Put("/tasks/:id", serviceInstance.UpdateTask) // Обновить задачу
+	app.Delete("/tasks/:id", serviceInstance.DeleteTask)
 
 	// Запуск HTTP-сервера в отдельной горутине
 	go func() {
@@ -61,4 +73,9 @@ func main() {
 	<-signalChan
 
 	logger.Info("Shutting down gracefully...")
+	if err := app.Shutdown(); err != nil {
+		logger.Fatal("Error during shutdown", zap.Error(err))
+	}
+
+	logger.Info("Server stopped")
 }
