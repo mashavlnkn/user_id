@@ -11,9 +11,3 @@ type Task struct {
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
 }
-type User struct {
-	ID        int       `json:"id"`
-	Username  string    `json:"username"`
-	Password  string    `json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-}

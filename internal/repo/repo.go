@@ -14,11 +14,12 @@ import (
 
 // SQL-запрос на вставку задачи
 const (
-	insertTaskQuery = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
-	selectTaskByID  = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
-	selectAllTasks  = `SELECT id, user_id, title, description, status, created_at FROM tasks`
-	updateTaskQuery = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
-	deleteTaskQuery = `DELETE FROM tasks WHERE id = $1`
+	insertTaskQuery     = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
+	selectTaskByID      = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
+	selectAllTasks      = `SELECT id, user_id, title, description, status, created_at FROM tasks`
+	updateTaskQuery     = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
+	deleteTaskQuery     = `DELETE FROM tasks WHERE id = $1`
+	selectTasksByUserID = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE user_id = $1`
 )
 
 type repository struct {
@@ -32,7 +33,7 @@ type Repository interface {
 	DeleteTask(ctx context.Context, id int) error
 	UpdateTask(ctx context.Context, id int, task Task) error
 	GetAllTasks(ctx context.Context) ([]Task, error)
-	GetTaskByUserID(ctx context.Context, userID int) (*Task, error)
+	GetTasksByUserID(ctx context.Context, userID int) ([]Task, error)
 }
 
 // NewRepository - создание нового экземпляра репозитория с подключением к PostgreSQL
@@ -138,4 +139,28 @@ func (r *repository) DeleteTask(ctx context.Context, id int) error {
 	}
 	return nil
 
+}
+
+// GetTasksByUserID - получение задач по ID пользователя
+func (r *repository) GetTasksByUserID(ctx context.Context, userID int) ([]Task, error) {
+	rows, err := r.pool.Query(ctx, selectTasksByUserID, userID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query tasks by user_id")
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var task Task
+		if err := rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.CreatedAt); err != nil {
+			return nil, errors.Wrap(err, "failed to scan task by user_id")
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error while iterating over user tasks")
+	}
+
+	return tasks, nil
 }
