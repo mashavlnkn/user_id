@@ -16,7 +16,6 @@ import (
 const (
 	insertTaskQuery     = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
 	selectTaskByID      = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
-	selectAllTasks      = `SELECT id, user_id, title, description, status, created_at FROM tasks`
 	updateTaskQuery     = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
 	deleteTaskQuery     = `DELETE FROM tasks WHERE id = $1`
 	selectTasksByUserID = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE user_id = $1`
@@ -32,7 +31,6 @@ type Repository interface {
 	GetTaskByID(ctx context.Context, id int) (*Task, error)
 	DeleteTask(ctx context.Context, id int) error
 	UpdateTask(ctx context.Context, id int, task Task) error
-	GetAllTasks(ctx context.Context) ([]Task, error)
 	GetTasksByUserID(ctx context.Context, userID int) ([]Task, error)
 }
 
@@ -90,30 +88,6 @@ func (r *repository) GetTaskByID(ctx context.Context, id int) (*Task, error) {
 		return nil, errors.Wrap(err, "failed to retrieve task")
 	}
 	return &task, nil
-}
-
-// GetAllTasks - получение списка всех задач
-func (r *repository) GetAllTasks(ctx context.Context) ([]Task, error) {
-	rows, err := r.pool.Query(ctx, selectAllTasks)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to query tasks")
-	}
-	defer rows.Close()
-
-	var tasks []Task
-	for rows.Next() {
-		var task Task
-		if err := rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.CreatedAt); err != nil {
-			return nil, errors.Wrap(err, "failed to scan task")
-		}
-		tasks = append(tasks, task)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "error while iterating over tasks")
-	}
-
-	return tasks, nil
 }
 
 // UpdateTask - обновление задачи

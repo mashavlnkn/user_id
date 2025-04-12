@@ -53,12 +53,6 @@ func main() {
 		return c.SendString("Сервер работает!")
 	})
 
-	app.Get("/tasks/:id", serviceInstance.GetTaskByID)
-	app.Post("/create_task", serviceInstance.CreateTask)
-	app.Get("/tasks", serviceInstance.GetAllTasks)    // Получить список всех задач
-	app.Put("/tasks/:id", serviceInstance.UpdateTask) // Обновить задачу
-	app.Delete("/tasks/:id", serviceInstance.DeleteTask)
-
 	// Запуск HTTP-сервера в отдельной горутине
 	go func() {
 		logger.Infof("Starting server on %s", cfg.Rest.ListenAddress)

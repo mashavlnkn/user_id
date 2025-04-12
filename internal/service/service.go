@@ -18,7 +18,6 @@ type Service interface {
 	GetTaskByID(ctx *fiber.Ctx) error
 	UpdateTask(ctx *fiber.Ctx) error
 	DeleteTask(ctx *fiber.Ctx) error
-	GetAllTasks(ctx *fiber.Ctx) error
 	GetTasksByUserID(ctx *fiber.Ctx) error
 }
 
@@ -108,29 +107,7 @@ func (s *service) GetTaskByID(ctx *fiber.Ctx) error {
 		"data":   task,
 	})
 }
-func (s *service) GetAllTasks(ctx *fiber.Ctx) error {
-	tasks, err := s.repo.GetAllTasks(ctx.Context())
-	if err != nil {
-		s.log.Error("Database error: failed to retrieve tasks", zap.Error(err))
-		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve tasks",
-		})
-	}
-	// Если задач нет, логируем предупреждение
-	if len(tasks) == 0 {
-		s.log.Warn("No tasks found")
-		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "success",
-			"data":   []interface{}{}, // Отправляем пустой массив, а не null
-		})
-	}
 
-	s.log.Info("Tasks retrieved successfully", zap.Int("count", len(tasks)))
-	return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status": "success",
-		"data":   tasks,
-	})
-}
 func (s *service) UpdateTask(ctx *fiber.Ctx) error {
 	id, err := strconv.Atoi(ctx.Params("id"))
 	if err != nil {
