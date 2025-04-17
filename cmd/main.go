@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 	"log"
 	"os"
@@ -49,9 +48,6 @@ func main() {
 
 	// Инициализация API
 	app := api.NewRouters(serviceInstance, cfg.AuthToken)
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Сервер работает!")
-	})
 
 	// Запуск HTTP-сервера в отдельной горутине
 	go func() {
