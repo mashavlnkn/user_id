@@ -14,11 +14,12 @@ import (
 
 // SQL-запрос на вставку задачи
 const (
-	insertTaskQuery     = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
-	selectTaskByID      = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
-	updateTaskQuery     = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
-	deleteTaskQuery     = `DELETE FROM tasks WHERE id = $1`
-	selectTasksByUserID = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE user_id = $1`
+	insertTaskQuery       = `INSERT INTO tasks (title, description) VALUES ($1, $2) RETURNING id;`
+	selectTaskByID        = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE id = $1`
+	updateTaskQuery       = `UPDATE tasks SET title = $1, description = $2 WHERE id = $3`
+	deleteTaskQuery       = `DELETE FROM tasks WHERE id = $1`
+	selectTasksByUserID   = `SELECT id, user_id, title, description, status, created_at FROM tasks WHERE user_id = $1`
+	selectTasksByUsername = `SELECT t.id, t.user_id, t.title, t.description, t.status, t.created_atFROM users u LEFT JOIN tasks t ON t.user_id = u.id WHERE u.username = $1`
 )
 
 type repository struct {
@@ -32,6 +33,8 @@ type Repository interface {
 	DeleteTask(ctx context.Context, id int) error
 	UpdateTask(ctx context.Context, id int, task Task) error
 	GetTasksByUserID(ctx context.Context, userID int) ([]Task, error)
+	CheckUserExists(ctx context.Context, userID int) (bool, error)
+	GetTasksByUsername(ctx context.Context, username string) ([]Task, error)
 }
 
 // NewRepository - создание нового экземпляра репозитория с подключением к PostgreSQL
@@ -134,6 +137,44 @@ func (r *repository) GetTasksByUserID(ctx context.Context, userID int) ([]Task, 
 
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "error while iterating over user tasks")
+	}
+
+	return tasks, nil
+}
+
+const selectUserByID = `SELECT id FROM users WHERE id = $1`
+
+func (r *repository) CheckUserExists(ctx context.Context, userID int) (bool, error) {
+	var id int
+	err := r.pool.QueryRow(ctx, selectUserByID, userID).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Пользователь не найден
+			return false, nil
+		}
+		// Ошибка выполнения запроса
+		return false, errors.Wrap(err, "failed to check user existence")
+	}
+	return true, nil // Пользователь найден
+}
+func (r *repository) GetTasksByUsername(ctx context.Context, username string) ([]Task, error) {
+	rows, err := r.pool.Query(ctx, selectTasksByUsername, username)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query tasks by username")
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var task Task
+		if err := rows.Scan(&task.ID, &task.UserID, &task.Title, &task.Description, &task.Status, &task.CreatedAt); err != nil {
+			return nil, errors.Wrap(err, "failed to scan task")
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error while iterating over tasks")
 	}
 
 	return tasks, nil

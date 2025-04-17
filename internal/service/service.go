@@ -1,8 +1,10 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"simple-service/internal/dto"
 	"simple-service/internal/repo"
@@ -19,6 +21,7 @@ type Service interface {
 	UpdateTask(ctx *fiber.Ctx) error
 	DeleteTask(ctx *fiber.Ctx) error
 	GetTasksByUserID(ctx *fiber.Ctx) error
+	GetTasksByUserName(ctx *fiber.Ctx) error
 }
 
 type service struct {
@@ -52,6 +55,19 @@ func (s *service) CreateTask(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid input data",
 			"details": vErr.Error(),
+		})
+	}
+	userExists, err := s.repo.CheckUserExists(ctx.Context(), req.UserID)
+	if err != nil {
+		s.log.Error("Error checking user existence", zap.Error(err))
+		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+	if !userExists {
+		s.log.Warn("User not found", zap.Int("user_id", req.UserID))
+		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "User not found",
 		})
 	}
 
@@ -134,6 +150,12 @@ func (s *service) UpdateTask(ctx *fiber.Ctx) error {
 	}
 	err = s.repo.UpdateTask(ctx.Context(), id, task)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			s.log.Warn("Task not found for update", zap.Int("task_id", id))
+			return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Task not found",
+			})
+		}
 		s.log.Error("Failed to update task", zap.Error(err))
 		return dto.InternalServerError(ctx)
 	}
@@ -181,6 +203,13 @@ func (s *service) GetTasksByUserID(ctx *fiber.Ctx) error {
 			"error": "Invalid user ID format",
 		})
 	}
+	authUserID, ok := ctx.Locals("user_id").(int)
+	if !ok || authUserID != userID {
+		s.log.Warn("Forbidden access to user tasks", zap.Int("requested_user_id", userID), zap.Any("auth_user_id", ctx.Locals("user_id")))
+		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "You don't have permission to access these tasks",
+		})
+	}
 
 	tasks, err := s.repo.GetTasksByUserID(ctx.Context(), userID)
 	if err != nil {
@@ -191,9 +220,33 @@ func (s *service) GetTasksByUserID(ctx *fiber.Ctx) error {
 	}
 
 	if len(tasks) == 0 {
+		s.log.Warn("No tasks found for user", zap.Int("user_id", userID))
 		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
 			"status": "success",
 			"data":   []interface{}{},
+		})
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"data":   tasks,
+	})
+}
+func (s *service) GetTasksByUserName(ctx *fiber.Ctx) error {
+	username := ctx.Params("username")
+
+	tasks, err := s.repo.GetTasksByUsername(ctx.Context(), username)
+	if err != nil {
+		s.log.Error("Database error: failed to retrieve tasks by username", zap.Error(err))
+		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve tasks",
+		})
+	}
+
+	if len(tasks) == 0 {
+		s.log.Warn("No tasks found for username", zap.String("username", username))
+		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "No tasks found for this user",
 		})
 	}
 

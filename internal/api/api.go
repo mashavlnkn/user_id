@@ -35,6 +35,8 @@ func NewRouters(service service.Service, token string) *fiber.App {
 	apiGroup.Put("/tasks/:id", service.UpdateTask)
 	apiGroup.Delete("/tasks/:id", service.DeleteTask)
 	apiGroup.Get("/task_user/:id", service.GetTasksByUserID)
+	apiGroup.Get("/tasks/by-username/:username", service.GetTasksByUserName)
+
 	app.Use(func(ctx *fiber.Ctx) error {
 		// Если ошибка произошла на уровне маршрутов
 		if err := ctx.Next(); err != nil {
